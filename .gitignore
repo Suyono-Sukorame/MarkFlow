@@ -63,3 +63,5 @@ dist/
 
 # Build logs
 build_log.txt
+# Exclude APK files from git
+release/apk/*.apk
