@@ -1,21 +1,90 @@
 <div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://ai.google.dev/static/site-assets/images/share-ais-513315318.png" />
+
+# MarkFlow
+
+Markdown Workspace untuk menulis, mengelola, dan mengorganisasi dokumen Markdown dengan lebih mudah dan produktif.
+
 </div>
 
-# Run and deploy your AI Studio app
+---
 
-This contains everything you need to run your app locally.
+## ✨ Fitur
 
-View your app in AI Studio: https://ai.studio/apps/74e86474-c3eb-4465-8098-b3d69f36c670
+- Editor Markdown modern
+- Live Preview
+- Manajemen dokumen dan folder
+- Antarmuka bersih dan responsif
+- Dukungan tema terang dan gelap
+- Penyimpanan lokal yang cepat
 
-## Run Locally
+---
 
-**Prerequisites:**  Node.js
+## 🚀 Memulai
 
+### Prasyarat
 
-1. Install dependencies:
-   `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
-   `npm run dev`
-# MarkFlow
+- Node.js 18 atau lebih baru
+- npm atau yarn
+
+### Instalasi
+
+```bash
+npm install
+```
+
+### Konfigurasi
+
+Buat file `.env.local` lalu tambahkan konfigurasi yang diperlukan:
+
+```env
+GEMINI_API_KEY=your_api_key_here
+```
+
+### Menjalankan Aplikasi
+
+```bash
+npm run dev
+```
+
+Aplikasi akan tersedia di:
+
+```text
+http://localhost:3000
+```
+
+---
+
+## 📁 Struktur Proyek
+
+```text
+src/
+├── components/
+├── pages/
+├── hooks/
+├── services/
+├── styles/
+└── utils/
+```
+
+---
+
+## 🛠️ Build Produksi
+
+```bash
+npm run build
+npm start
+```
+
+---
+
+## 📄 Lisensi
+
+MIT License
+
+---
+
+<div align="center">
+
+Made with ❤️ for Markdown enthusiasts
+
+</div>
