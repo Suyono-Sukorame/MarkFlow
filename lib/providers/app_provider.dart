@@ -1,7 +1,10 @@
 import 'dart:convert';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
+import 'package:file_picker/file_picker.dart';
+import 'package:path/path.dart' as path;
 import '../models/folder.dart';
 import '../models/markdown_file.dart';
 import '../data/initial_data.dart';
@@ -203,5 +206,222 @@ class AppProvider with ChangeNotifier {
     _activeView = ActiveView.dashboard;
     await _saveData();
     notifyListeners();
+  }
+
+  // Import folder from device storage
+  Future<Map<String, dynamic>> importFolderFromDevice() async {
+    try {
+      // Pick directory
+      String? selectedDirectory = await FilePicker.platform.getDirectoryPath();
+      
+      if (selectedDirectory == null) {
+        return {'success': false, 'message': 'No folder selected'};
+      }
+
+      final dir = Directory(selectedDirectory);
+      if (!await dir.exists()) {
+        return {'success': false, 'message': 'Folder does not exist'};
+      }
+
+      int filesImported = 0;
+      int foldersImported = 0;
+      String? rootFolderId;
+
+      // Create root folder for import
+      final folderName = path.basename(selectedDirectory);
+      final rootFolder = Folder(
+        id: 'imported-${DateTime.now().millisecondsSinceEpoch}',
+        name: folderName,
+        parentId: _currentFolderId,
+        updatedAt: 'Just now',
+      );
+      _folders.add(rootFolder);
+      rootFolderId = rootFolder.id;
+      foldersImported++;
+
+      // Recursively import files and subfolders
+      await _importDirectoryRecursive(dir, rootFolderId, (files, folders) {
+        filesImported += files;
+        foldersImported += folders;
+      });
+
+      await _saveData();
+      notifyListeners();
+
+      return {
+        'success': true,
+        'filesImported': filesImported,
+        'foldersImported': foldersImported,
+        'folderName': folderName,
+      };
+    } catch (e) {
+      return {'success': false, 'message': 'Error: $e'};
+    }
+  }
+
+  Future<void> _importDirectoryRecursive(
+    Directory dir,
+    String parentFolderId,
+    Function(int files, int folders) onProgress,
+  ) async {
+    int filesCount = 0;
+    int foldersCount = 0;
+
+    try {
+      await for (var entity in dir.list()) {
+        if (entity is File) {
+          // Check if it's a markdown file
+          if (entity.path.toLowerCase().endsWith('.md') ||
+              entity.path.toLowerCase().endsWith('.markdown')) {
+            try {
+              final content = await entity.readAsString();
+              final fileName = path.basename(entity.path);
+              final stat = await entity.stat();
+              final sizeInKb = '${(stat.size / 1024).toStringAsFixed(1)}kb';
+
+              final markdownFile = MarkdownFile(
+                id: 'imported-file-${DateTime.now().millisecondsSinceEpoch}-$filesCount',
+                name: fileName,
+                content: content,
+                folderId: parentFolderId,
+                tags: [],
+                isFavorite: false,
+                updatedAt: 'Just now',
+                size: sizeInKb,
+              );
+
+              _files.add(markdownFile);
+              filesCount++;
+              
+              // Small delay to prevent overwhelming
+              if (filesCount % 10 == 0) {
+                await Future.delayed(const Duration(milliseconds: 10));
+              }
+            } catch (e) {
+              debugPrint('Error reading file ${entity.path}: $e');
+            }
+          }
+        } else if (entity is Directory) {
+          // Create subfolder
+          final folderName = path.basename(entity.path);
+          
+          // Skip hidden folders
+          if (folderName.startsWith('.')) continue;
+
+          final subFolder = Folder(
+            id: 'imported-folder-${DateTime.now().millisecondsSinceEpoch}-$foldersCount',
+            name: folderName,
+            parentId: parentFolderId,
+            updatedAt: 'Just now',
+          );
+
+          _folders.add(subFolder);
+          foldersCount++;
+
+          // Recursively import subfolder
+          await _importDirectoryRecursive(entity, subFolder.id, onProgress);
+        }
+      }
+
+      onProgress(filesCount, foldersCount);
+    } catch (e) {
+      debugPrint('Error importing directory: $e');
+    }
+  }
+
+  // Import single markdown file
+  Future<Map<String, dynamic>> importSingleFile() async {
+    try {
+      FilePickerResult? result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['md', 'markdown'],
+        allowMultiple: false,
+      );
+
+      if (result == null || result.files.isEmpty) {
+        return {'success': false, 'message': 'No file selected'};
+      }
+
+      final file = File(result.files.single.path!);
+      final content = await file.readAsString();
+      final fileName = path.basename(file.path);
+      final stat = await file.stat();
+      final sizeInKb = '${(stat.size / 1024).toStringAsFixed(1)}kb';
+
+      final markdownFile = MarkdownFile(
+        id: 'imported-file-${DateTime.now().millisecondsSinceEpoch}',
+        name: fileName,
+        content: content,
+        folderId: _currentFolderId,
+        tags: ['imported'],
+        isFavorite: false,
+        updatedAt: 'Just now',
+        size: sizeInKb,
+      );
+
+      _files.add(markdownFile);
+      await _saveData();
+      notifyListeners();
+
+      return {
+        'success': true,
+        'fileName': fileName,
+      };
+    } catch (e) {
+      return {'success': false, 'message': 'Error: $e'};
+    }
+  }
+
+  // Import multiple markdown files
+  Future<Map<String, dynamic>> importMultipleFiles() async {
+    try {
+      FilePickerResult? result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['md', 'markdown'],
+        allowMultiple: true,
+      );
+
+      if (result == null || result.files.isEmpty) {
+        return {'success': false, 'message': 'No files selected'};
+      }
+
+      int importedCount = 0;
+
+      for (var platformFile in result.files) {
+        try {
+          final file = File(platformFile.path!);
+          final content = await file.readAsString();
+          final fileName = path.basename(file.path);
+          final stat = await file.stat();
+          final sizeInKb = '${(stat.size / 1024).toStringAsFixed(1)}kb';
+
+          final markdownFile = MarkdownFile(
+            id: 'imported-file-${DateTime.now().millisecondsSinceEpoch}-$importedCount',
+            name: fileName,
+            content: content,
+            folderId: _currentFolderId,
+            tags: ['imported'],
+            isFavorite: false,
+            updatedAt: 'Just now',
+            size: sizeInKb,
+          );
+
+          _files.add(markdownFile);
+          importedCount++;
+        } catch (e) {
+          debugPrint('Error importing file ${platformFile.name}: $e');
+        }
+      }
+
+      await _saveData();
+      notifyListeners();
+
+      return {
+        'success': true,
+        'filesImported': importedCount,
+      };
+    } catch (e) {
+      return {'success': false, 'message': 'Error: $e'};
+    }
   }
 }

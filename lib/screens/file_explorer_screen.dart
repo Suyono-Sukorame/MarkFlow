@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:permission_handler/permission_handler.dart';
 import '../providers/app_provider.dart';
 
 class FileExplorerScreen extends StatefulWidget {
@@ -11,6 +12,7 @@ class FileExplorerScreen extends StatefulWidget {
 
 class _FileExplorerScreenState extends State<FileExplorerScreen> {
   bool _isFabOpen = false;
+  bool _isImporting = false;
 
   @override
   Widget build(BuildContext context) {
@@ -182,6 +184,16 @@ class _FileExplorerScreenState extends State<FileExplorerScreen> {
                   onPressed: () {
                     setState(() => _isFabOpen = false);
                     _showNewFolderDialog(context, provider);
+                  },
+                ),
+                const SizedBox(height: 12),
+                _buildSmallFab(
+                  context,
+                  icon: Icons.upload_file,
+                  label: 'Import Files',
+                  onPressed: () {
+                    setState(() => _isFabOpen = false);
+                    _showImportDialog(context, provider);
                   },
                 ),
                 const SizedBox(height: 12),
@@ -510,5 +522,372 @@ class _FileExplorerScreenState extends State<FileExplorerScreen> {
         ],
       ),
     );
+  }
+
+  void _showImportDialog(BuildContext context, AppProvider provider) {
+    final colorScheme = Theme.of(context).colorScheme;
+    
+    showModalBottomSheet(
+      context: context,
+      builder: (context) => Container(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Import Markdown Files',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: colorScheme.primary,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Choose how you want to import your markdown files',
+              style: TextStyle(
+                fontSize: 12,
+                color: colorScheme.onSurfaceVariant,
+              ),
+            ),
+            const SizedBox(height: 24),
+            
+            // Import Folder
+            _buildImportOption(
+              context,
+              icon: Icons.folder_open,
+              title: 'Import Folder',
+              description: 'Import all markdown files from a folder (including subfolders)',
+              onTap: () {
+                Navigator.pop(context);
+                _importFolder(context, provider);
+              },
+            ),
+            
+            const SizedBox(height: 12),
+            
+            // Import Multiple Files
+            _buildImportOption(
+              context,
+              icon: Icons.file_copy,
+              title: 'Import Multiple Files',
+              description: 'Select and import multiple markdown files at once',
+              onTap: () {
+                Navigator.pop(context);
+                _importMultipleFiles(context, provider);
+              },
+            ),
+            
+            const SizedBox(height: 12),
+            
+            // Import Single File
+            _buildImportOption(
+              context,
+              icon: Icons.insert_drive_file,
+              title: 'Import Single File',
+              description: 'Import one markdown file',
+              onTap: () {
+                Navigator.pop(context);
+                _importSingleFile(context, provider);
+              },
+            ),
+            
+            const SizedBox(height: 16),
+            
+            // Cancel button
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Cancel'),
+              ),
+            ),
+            
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildImportOption(
+    BuildContext context, {
+    required IconData icon,
+    required String title,
+    required String description,
+    required VoidCallback onTap,
+  }) {
+    final colorScheme = Theme.of(context).colorScheme;
+    
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          border: Border.all(color: colorScheme.outlineVariant),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: colorScheme.primaryContainer,
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Icon(
+                icon,
+                color: colorScheme.onPrimaryContainer,
+                size: 24,
+              ),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    description,
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Icon(
+              Icons.arrow_forward_ios,
+              size: 16,
+              color: colorScheme.onSurfaceVariant,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _importFolder(BuildContext context, AppProvider provider) async {
+    // Check and request storage permission
+    final hasPermission = await _checkStoragePermission(context);
+    if (!hasPermission) return;
+
+    // Show loading dialog
+    if (mounted) {
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => const Center(
+          child: Card(
+            child: Padding(
+              padding: EdgeInsets.all(24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  CircularProgressIndicator(),
+                  SizedBox(height: 16),
+                  Text('Importing folder...'),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
+    // Import folder
+    final result = await provider.importFolderFromDevice();
+
+    // Close loading dialog
+    if (mounted) Navigator.pop(context);
+
+    // Show result
+    if (mounted) {
+      _showResultSnackBar(context, result);
+    }
+  }
+
+  Future<void> _importSingleFile(BuildContext context, AppProvider provider) async {
+    // Check permission
+    final hasPermission = await _checkStoragePermission(context);
+    if (!hasPermission) return;
+
+    // Show loading
+    if (mounted) {
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => const Center(
+          child: Card(
+            child: Padding(
+              padding: EdgeInsets.all(24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  CircularProgressIndicator(),
+                  SizedBox(height: 16),
+                  Text('Importing file...'),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
+    // Import file
+    final result = await provider.importSingleFile();
+
+    // Close loading
+    if (mounted) Navigator.pop(context);
+
+    // Show result
+    if (mounted) {
+      _showResultSnackBar(context, result);
+    }
+  }
+
+  Future<void> _importMultipleFiles(BuildContext context, AppProvider provider) async {
+    // Check permission
+    final hasPermission = await _checkStoragePermission(context);
+    if (!hasPermission) return;
+
+    // Show loading
+    if (mounted) {
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => const Center(
+          child: Card(
+            child: Padding(
+              padding: EdgeInsets.all(24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  CircularProgressIndicator(),
+                  SizedBox(height: 16),
+                  Text('Importing files...'),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
+    // Import files
+    final result = await provider.importMultipleFiles();
+
+    // Close loading
+    if (mounted) Navigator.pop(context);
+
+    // Show result
+    if (mounted) {
+      _showResultSnackBar(context, result);
+    }
+  }
+
+  Future<bool> _checkStoragePermission(BuildContext context) async {
+    // Check storage permission for Android
+    if (await Permission.storage.isGranted) {
+      return true;
+    }
+
+    // Try media library permission (Android 13+)
+    if (await Permission.photos.isGranted || 
+        await Permission.videos.isGranted ||
+        await Permission.manageExternalStorage.isGranted) {
+      return true;
+    }
+
+    // Request permission
+    final status = await Permission.storage.request();
+    
+    if (status.isGranted) {
+      return true;
+    }
+
+    // If denied, try manageExternalStorage (Android 11+)
+    if (status.isDenied) {
+      final manageStatus = await Permission.manageExternalStorage.request();
+      if (manageStatus.isGranted) {
+        return true;
+      }
+    }
+
+    // Show permission denied message
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text('Storage permission is required to import files'),
+          action: SnackBarAction(
+            label: 'Settings',
+            onPressed: () => openAppSettings(),
+          ),
+        ),
+      );
+    }
+
+    return false;
+  }
+
+  void _showResultSnackBar(BuildContext context, Map<String, dynamic> result) {
+    final colorScheme = Theme.of(context).colorScheme;
+    
+    if (result['success'] == true) {
+      String message;
+      if (result.containsKey('filesImported') && result.containsKey('foldersImported')) {
+        message = 'Imported ${result['filesImported']} files and ${result['foldersImported']} folders';
+      } else if (result.containsKey('filesImported')) {
+        message = 'Imported ${result['filesImported']} files';
+      } else if (result.containsKey('fileName')) {
+        message = 'Imported: ${result['fileName']}';
+      } else {
+        message = 'Import successful!';
+      }
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Row(
+            children: [
+              Icon(Icons.check_circle, color: colorScheme.onPrimary),
+              const SizedBox(width: 12),
+              Expanded(child: Text(message)),
+            ],
+          ),
+          backgroundColor: Colors.green,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Row(
+            children: [
+              Icon(Icons.error, color: colorScheme.onError),
+              const SizedBox(width: 12),
+              Expanded(child: Text(result['message'] ?? 'Import failed')),
+            ],
+          ),
+          backgroundColor: colorScheme.error,
+          behavior: SnackBarBehavior.floating,
+          action: SnackBarAction(
+            label: 'OK',
+            textColor: colorScheme.onError,
+            onPressed: () {},
+          ),
+        ),
+      );
+    }
   }
 }
