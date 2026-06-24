@@ -42,9 +42,9 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
-
-# APK build outputs (keep for release)
-# build/app/outputs/
+/android/.gradle/
+/android/build/
+/android/app/build/
 
 # Credentials & Sensitive Data
 *.key
@@ -63,5 +63,32 @@ dist/
 
 # Build logs
 build_log.txt
-# Exclude APK files from git
+
+# APK/IPA/Build outputs (too large for GitHub)
 release/apk/*.apk
+*.apk
+*.ipa
+*.aab
+*.dSYM.zip
+
+# Large assets (logo already in assets/)
+assets/*.zip
+assets/*.tar.gz
+assets/*.mp4
+assets/*.mov
+
+# Pods (will be regenerated)
+ios/Pods/
+macos/Pods/
+**/Pods/
+Podfile.lock
+
+# Generated files
+ios/Flutter/Generated.xcconfig
+ios/Flutter/flutter_export_environment.sh
+macos/Flutter/ephemeral/
+linux/flutter/ephemeral/
+windows/flutter/ephemeral/
+
+# Large dependencies
+**/ios/Flutter/.last_build_id
