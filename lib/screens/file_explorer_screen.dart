@@ -689,7 +689,20 @@ class _FileExplorerScreenState extends State<FileExplorerScreen> {
   Future<void> _importFolder(BuildContext context, AppProvider provider) async {
     // Check and request storage permission
     final hasPermission = await _checkStoragePermission(context);
-    if (!hasPermission) return;
+    if (!hasPermission) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Storage permission is required to import folders'),
+            backgroundColor: Colors.orange,
+          ),
+        );
+      }
+      return;
+    }
+
+    // Small delay to ensure permission is fully granted
+    await Future.delayed(const Duration(milliseconds: 300));
 
     // Show loading dialog
     if (mounted) {
@@ -705,7 +718,7 @@ class _FileExplorerScreenState extends State<FileExplorerScreen> {
                 children: [
                   CircularProgressIndicator(),
                   SizedBox(height: 16),
-                  Text('Importing folder...'),
+                  Text('Opening folder picker...'),
                 ],
               ),
             ),
@@ -850,7 +863,20 @@ class _FileExplorerScreenState extends State<FileExplorerScreen> {
   Future<void> _importSingleFile(BuildContext context, AppProvider provider) async {
     // Check permission
     final hasPermission = await _checkStoragePermission(context);
-    if (!hasPermission) return;
+    if (!hasPermission) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Storage permission is required to import files'),
+            backgroundColor: Colors.orange,
+          ),
+        );
+      }
+      return;
+    }
+
+    // Small delay to ensure permission is fully granted
+    await Future.delayed(const Duration(milliseconds: 300));
 
     // Show loading
     if (mounted) {
@@ -866,7 +892,7 @@ class _FileExplorerScreenState extends State<FileExplorerScreen> {
                 children: [
                   CircularProgressIndicator(),
                   SizedBox(height: 16),
-                  Text('Importing file...'),
+                  Text('Opening file picker...'),
                 ],
               ),
             ),
@@ -890,7 +916,20 @@ class _FileExplorerScreenState extends State<FileExplorerScreen> {
   Future<void> _importMultipleFiles(BuildContext context, AppProvider provider) async {
     // Check permission
     final hasPermission = await _checkStoragePermission(context);
-    if (!hasPermission) return;
+    if (!hasPermission) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Storage permission is required to import files'),
+            backgroundColor: Colors.orange,
+          ),
+        );
+      }
+      return;
+    }
+
+    // Small delay to ensure permission is fully granted
+    await Future.delayed(const Duration(milliseconds: 300));
 
     // Show loading
     if (mounted) {
@@ -906,7 +945,7 @@ class _FileExplorerScreenState extends State<FileExplorerScreen> {
                 children: [
                   CircularProgressIndicator(),
                   SizedBox(height: 16),
-                  Text('Importing files...'),
+                  Text('Opening file picker...'),
                 ],
               ),
             ),
@@ -948,6 +987,40 @@ class _FileExplorerScreenState extends State<FileExplorerScreen> {
     if (mounted) {
       final shouldRequest = await _showPermissionExplanationDialog(context);
       if (!shouldRequest) return false;
+    }
+
+    // Request storage permission
+    var status = await Permission.storage.request();
+    
+    if (status.isGranted) {
+      return true;
+    }
+
+    // For Android 11+, try MANAGE_EXTERNAL_STORAGE
+    if (status.isDenied || status.isPermanentlyDenied) {
+      // Note: MANAGE_EXTERNAL_STORAGE requires manual enable in Settings
+      // We can't request it directly, must redirect to Settings
+      
+      if (mounted) {
+        final shouldOpenSettings = await _showManualPermissionDialog(context);
+        if (shouldOpenSettings) {
+          await openAppSettings();
+          
+          // Wait a bit for user to return from settings
+          await Future.delayed(const Duration(seconds: 1));
+          
+          // Check again after returning from settings
+          if (await Permission.manageExternalStorage.isGranted ||
+              await Permission.storage.isGranted) {
+            return true;
+          }
+        }
+      }
+      return false;
+    }
+
+    return false;
+  }
     }
 
     // Request storage permission
