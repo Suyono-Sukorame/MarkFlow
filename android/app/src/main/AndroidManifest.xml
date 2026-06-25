@@ -8,9 +8,10 @@
         tools:ignore="ScopedStorage" />
     
     <application
-        android:label="markflow_flutter"
+        android:label="MarkFlow"
         android:name="${applicationName}"
-        android:icon="@mipmap/ic_launcher">
+        android:icon="@mipmap/ic_launcher"
+        android:requestLegacyExternalStorage="true">
         <activity
             android:name=".MainActivity"
             android:exported="true"

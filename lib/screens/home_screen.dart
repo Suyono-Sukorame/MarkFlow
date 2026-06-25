@@ -20,21 +20,10 @@ class HomeScreen extends StatelessWidget {
         final isDocumentView = activeView == ActiveView.reader || activeView == ActiveView.editor;
 
         return Scaffold(
-          body: Stack(
-            children: [
-              // Main content
-              _buildMainContent(context, provider, activeView),
-              
-              // Bottom navigation (only show for main views)
-              if (!isDocumentView)
-                Positioned(
-                  left: 0,
-                  right: 0,
-                  bottom: 0,
-                  child: _buildBottomNavigation(context, provider, activeView),
-                ),
-            ],
-          ),
+          body: _buildMainContent(context, provider, activeView),
+          bottomNavigationBar: !isDocumentView 
+              ? _buildBottomNavigation(context, provider, activeView)
+              : null,
         );
       },
     );
@@ -60,108 +49,76 @@ class HomeScreen extends StatelessWidget {
   }
 
   Widget _buildBottomNavigation(BuildContext context, AppProvider provider, ActiveView activeView) {
-    return Container(
-      height: 80,
-      decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surface,
-        border: Border(
-          top: BorderSide(
-            color: Theme.of(context).colorScheme.outlineVariant.withOpacity(0.2),
-          ),
-        ),
-      ),
-      child: SafeArea(
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceAround,
-          children: [
-            _buildNavItem(
-              context,
-              icon: Icons.home_outlined,
-              label: 'Home',
-              isActive: activeView == ActiveView.dashboard,
-              onTap: () => provider.setActiveView(ActiveView.dashboard),
-            ),
-            _buildNavItem(
-              context,
-              icon: Icons.folder_open,
-              label: 'Files',
-              isActive: activeView == ActiveView.files,
-              onTap: () => provider.setActiveView(ActiveView.files),
-            ),
-            _buildNavItem(
-              context,
-              icon: Icons.search,
-              label: 'Search',
-              isActive: activeView == ActiveView.search,
-              onTap: () => provider.setActiveView(ActiveView.search),
-            ),
-            _buildNavItem(
-              context,
-              icon: Icons.star_outline,
-              label: 'Favorites',
-              isActive: activeView == ActiveView.favorites,
-              onTap: () => provider.setActiveView(ActiveView.favorites),
-            ),
-            _buildNavItem(
-              context,
-              icon: Icons.settings_outlined,
-              label: 'Settings',
-              isActive: activeView == ActiveView.settings,
-              onTap: () => provider.setActiveView(ActiveView.settings),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
+    // Map ActiveView to index
+    int selectedIndex = 0;
+    switch (activeView) {
+      case ActiveView.dashboard:
+        selectedIndex = 0;
+        break;
+      case ActiveView.files:
+        selectedIndex = 1;
+        break;
+      case ActiveView.search:
+        selectedIndex = 2;
+        break;
+      case ActiveView.favorites:
+        selectedIndex = 3;
+        break;
+      case ActiveView.settings:
+        selectedIndex = 4;
+        break;
+      default:
+        selectedIndex = 0;
+    }
 
-  Widget _buildNavItem(
-    BuildContext context, {
-    required IconData icon,
-    required String label,
-    required bool isActive,
-    required VoidCallback onTap,
-  }) {
-    final colorScheme = Theme.of(context).colorScheme;
-    
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(16),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-              decoration: BoxDecoration(
-                color: isActive
-                    ? colorScheme.secondaryContainer
-                    : Colors.transparent,
-                borderRadius: BorderRadius.circular(20),
-              ),
-              child: Icon(
-                icon,
-                size: 20,
-                color: isActive
-                    ? colorScheme.onSecondaryContainer
-                    : colorScheme.onSurfaceVariant,
-              ),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: 10,
-                fontWeight: isActive ? FontWeight.bold : FontWeight.w500,
-                color: isActive
-                    ? colorScheme.primary
-                    : colorScheme.onSurfaceVariant,
-              ),
-            ),
-          ],
+    return NavigationBar(
+      selectedIndex: selectedIndex,
+      onDestinationSelected: (index) {
+        switch (index) {
+          case 0:
+            provider.setActiveView(ActiveView.dashboard);
+            break;
+          case 1:
+            provider.setActiveView(ActiveView.files);
+            break;
+          case 2:
+            provider.setActiveView(ActiveView.search);
+            break;
+          case 3:
+            provider.setActiveView(ActiveView.favorites);
+            break;
+          case 4:
+            provider.setActiveView(ActiveView.settings);
+            break;
+        }
+      },
+      destinations: const [
+        NavigationDestination(
+          icon: Icon(Icons.home_outlined),
+          selectedIcon: Icon(Icons.home),
+          label: 'Home',
         ),
-      ),
+        NavigationDestination(
+          icon: Icon(Icons.folder_outlined),
+          selectedIcon: Icon(Icons.folder),
+          label: 'Files',
+        ),
+        NavigationDestination(
+          icon: Icon(Icons.search),
+          selectedIcon: Icon(Icons.search),
+          label: 'Search',
+        ),
+        NavigationDestination(
+          icon: Icon(Icons.star_outline),
+          selectedIcon: Icon(Icons.star),
+          label: 'Favorites',
+        ),
+        NavigationDestination(
+          icon: Icon(Icons.settings_outlined),
+          selectedIcon: Icon(Icons.settings),
+          label: 'Settings',
+        ),
+      ],
     );
   }
 }

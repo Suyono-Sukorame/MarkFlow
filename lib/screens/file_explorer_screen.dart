@@ -711,10 +711,131 @@ class _FileExplorerScreenState extends State<FileExplorerScreen> {
     // Close loading dialog
     if (mounted) Navigator.pop(context);
 
+    // Check if folder picker returned null (not available or cancelled)
+    if (result['success'] == false && result['message'] == 'No folder selected') {
+      // Show fallback options dialog
+      if (mounted) {
+        _showFolderPickerFallbackDialog(context, provider);
+      }
+      return;
+    }
+
     // Show result
     if (mounted) {
       _showResultSnackBar(context, result);
     }
+  }
+
+  Future<void> _showFolderPickerFallbackDialog(BuildContext context, AppProvider provider) async {
+    final colorScheme = Theme.of(context).colorScheme;
+    
+    return showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        icon: Icon(
+          Icons.info_outline,
+          color: colorScheme.primary,
+          size: 48,
+        ),
+        title: const Text('Folder Picker Not Available'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'The folder picker is not available on your device. You have these options:',
+              style: TextStyle(fontSize: 14),
+            ),
+            const SizedBox(height: 16),
+            _buildFallbackOption(
+              context,
+              icon: Icons.file_copy,
+              title: '1. Select Multiple Files',
+              description: 'Choose multiple markdown files at once',
+            ),
+            const SizedBox(height: 12),
+            _buildFallbackOption(
+              context,
+              icon: Icons.settings,
+              title: '2. Grant All Files Access',
+              description: 'Enable full storage access in Settings',
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          OutlinedButton.icon(
+            onPressed: () async {
+              Navigator.pop(context);
+              await openAppSettings();
+            },
+            icon: const Icon(Icons.settings, size: 18),
+            label: const Text('Settings'),
+          ),
+          FilledButton.icon(
+            onPressed: () {
+              Navigator.pop(context);
+              _importMultipleFiles(context, provider);
+            },
+            icon: const Icon(Icons.file_copy, size: 18),
+            label: const Text('Select Files'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFallbackOption(
+    BuildContext context, {
+    required IconData icon,
+    required String title,
+    required String description,
+  }) {
+    final colorScheme = Theme.of(context).colorScheme;
+    
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          padding: const EdgeInsets.all(8),
+          decoration: BoxDecoration(
+            color: colorScheme.primaryContainer.withOpacity(0.5),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Icon(
+            icon,
+            size: 20,
+            color: colorScheme.onPrimaryContainer,
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                title,
+                style: const TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                description,
+                style: TextStyle(
+                  fontSize: 11,
+                  color: colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
   }
 
   Future<void> _importSingleFile(BuildContext context, AppProvider provider) async {
@@ -798,47 +919,211 @@ class _FileExplorerScreenState extends State<FileExplorerScreen> {
   }
 
   Future<bool> _checkStoragePermission(BuildContext context) async {
-    // Check storage permission for Android
+    // Check if MANAGE_EXTERNAL_STORAGE is granted (best for Android 11+)
+    if (await Permission.manageExternalStorage.isGranted) {
+      return true;
+    }
+
+    // Check storage permission for Android < 11
     if (await Permission.storage.isGranted) {
       return true;
     }
 
     // Try media library permission (Android 13+)
     if (await Permission.photos.isGranted || 
-        await Permission.videos.isGranted ||
-        await Permission.manageExternalStorage.isGranted) {
+        await Permission.videos.isGranted) {
       return true;
     }
 
-    // Request permission
+    // Show explanation dialog before requesting permission
+    if (mounted) {
+      final shouldRequest = await _showPermissionExplanationDialog(context);
+      if (!shouldRequest) return false;
+    }
+
+    // Request storage permission
     final status = await Permission.storage.request();
     
     if (status.isGranted) {
       return true;
     }
 
-    // If denied, try manageExternalStorage (Android 11+)
-    if (status.isDenied) {
-      final manageStatus = await Permission.manageExternalStorage.request();
-      if (manageStatus.isGranted) {
-        return true;
+    // For Android 11+, explain that MANAGE_EXTERNAL_STORAGE needs manual enable
+    if (status.isDenied || status.isPermanentlyDenied) {
+      if (mounted) {
+        final shouldOpenSettings = await _showManualPermissionDialog(context);
+        if (shouldOpenSettings) {
+          await openAppSettings();
+        }
       }
-    }
-
-    // Show permission denied message
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: const Text('Storage permission is required to import files'),
-          action: SnackBarAction(
-            label: 'Settings',
-            onPressed: () => openAppSettings(),
-          ),
-        ),
-      );
+      return false;
     }
 
     return false;
+  }
+
+  Future<bool> _showPermissionExplanationDialog(BuildContext context) async {
+    final colorScheme = Theme.of(context).colorScheme;
+    
+    return await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        icon: Icon(
+          Icons.folder_open,
+          color: colorScheme.primary,
+          size: 48,
+        ),
+        title: const Text('Storage Access Required'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'MarkFlow needs access to your storage to:',
+              style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+            ),
+            const SizedBox(height: 12),
+            _buildPermissionReason(
+              context,
+              icon: Icons.download,
+              text: 'Import markdown files from your device',
+            ),
+            const SizedBox(height: 8),
+            _buildPermissionReason(
+              context,
+              icon: Icons.folder,
+              text: 'Read folders containing markdown notes',
+            ),
+            const SizedBox(height: 8),
+            _buildPermissionReason(
+              context,
+              icon: Icons.security,
+              text: 'Your files stay on your device (no cloud upload)',
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Grant Access'),
+          ),
+        ],
+      ),
+    ) ?? false;
+  }
+
+  Future<bool> _showManualPermissionDialog(BuildContext context) async {
+    final colorScheme = Theme.of(context).colorScheme;
+    
+    return await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        icon: Icon(
+          Icons.settings_suggest,
+          color: colorScheme.tertiary,
+          size: 48,
+        ),
+        title: const Text('Manual Permission Required'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'For Android 11+, you need to manually enable storage access:',
+              style: TextStyle(fontSize: 14),
+            ),
+            const SizedBox(height: 16),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: colorScheme.surfaceContainerHighest,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: colorScheme.outline.withOpacity(0.3)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _buildStep(context, '1.', 'Open Settings (tap button below)'),
+                  const SizedBox(height: 6),
+                  _buildStep(context, '2.', 'Find "Permissions" or "Storage"'),
+                  const SizedBox(height: 6),
+                  _buildStep(context, '3.', 'Enable "All files access" or "Manage storage"'),
+                  const SizedBox(height: 6),
+                  _buildStep(context, '4.', 'Return to MarkFlow and try again'),
+                ],
+              ),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              'Note: You can also use "Import Multiple Files" option which works without special permission.',
+              style: TextStyle(
+                fontSize: 11,
+                color: colorScheme.onSurfaceVariant,
+                fontStyle: FontStyle.italic,
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Not Now'),
+          ),
+          FilledButton.icon(
+            onPressed: () => Navigator.pop(context, true),
+            icon: const Icon(Icons.settings, size: 18),
+            label: const Text('Open Settings'),
+          ),
+        ],
+      ),
+    ) ?? false;
+  }
+
+  Widget _buildPermissionReason(
+    BuildContext context, {
+    required IconData icon,
+    required String text,
+  }) {
+    final colorScheme = Theme.of(context).colorScheme;
+    
+    return Row(
+      children: [
+        Icon(icon, size: 18, color: colorScheme.primary),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text(
+            text,
+            style: const TextStyle(fontSize: 12),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildStep(BuildContext context, String number, String text) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          number,
+          style: const TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        const SizedBox(width: 6),
+        Expanded(
+          child: Text(
+            text,
+            style: const TextStyle(fontSize: 12),
+          ),
+        ),
+      ],
+    );
   }
 
   void _showResultSnackBar(BuildContext context, Map<String, dynamic> result) {
