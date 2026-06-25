@@ -234,27 +234,36 @@ class _FileExplorerScreenState extends State<FileExplorerScreen> {
     return Row(
       mainAxisAlignment: MainAxisAlignment.end,
       children: [
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-          decoration: BoxDecoration(
-            color: colorScheme.surfaceContainerHigh,
+        Material(
+          color: Colors.transparent,
+          child: InkWell(
+            onTap: onPressed,
             borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: colorScheme.outlineVariant.withOpacity(0.2)),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                label,
-                style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                  color: colorScheme.onSurface,
+            child: Ink(
+              decoration: BoxDecoration(
+                color: colorScheme.surfaceContainerHigh,
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: colorScheme.outlineVariant.withOpacity(0.2)),
+              ),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      label,
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: colorScheme.onSurface,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Icon(icon, size: 16, color: colorScheme.secondary),
+                  ],
                 ),
               ),
-              const SizedBox(width: 12),
-              Icon(icon, size: 16, color: colorScheme.secondary),
-            ],
+            ),
           ),
         ),
       ],
