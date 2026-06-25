@@ -336,39 +336,64 @@ class AppProvider with ChangeNotifier {
   // Import folder from device storage
   Future<Map<String, dynamic>> importFolderFromDevice() async {
     try {
-      // Pick directory
-      String? selectedDirectory = await FilePicker.platform.getDirectoryPath();
+      // Use Storage Access Framework (SAF) for reliable file picking
+      // This works on all Android versions and handles permissions automatically
+      FilePickerResult? result = await FilePicker.platform.pickFiles(
+        allowMultiple: true,
+        type: FileType.custom,
+        allowedExtensions: ['md', 'markdown'],
+        dialogTitle: 'Select Markdown Files',
+      );
       
-      if (selectedDirectory == null) {
-        return {'success': false, 'message': 'No folder selected'};
-      }
-
-      final dir = Directory(selectedDirectory);
-      if (!await dir.exists()) {
-        return {'success': false, 'message': 'Folder does not exist'};
+      if (result == null || result.files.isEmpty) {
+        return {'success': false, 'message': 'No files selected'};
       }
 
       int filesImported = 0;
-      int foldersImported = 0;
       String? rootFolderId;
 
-      // Create root folder for import
-      final folderName = path.basename(selectedDirectory);
+      // Create a folder for imported files
+      final now = DateTime.now();
+      final folderName = 'Imported ${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')} ${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}';
       final rootFolder = Folder(
-        id: 'imported-${DateTime.now().millisecondsSinceEpoch}',
+        id: 'imported-${now.millisecondsSinceEpoch}',
         name: folderName,
         parentId: _currentFolderId,
         updatedAt: 'Just now',
       );
       _folders.add(rootFolder);
       rootFolderId = rootFolder.id;
-      foldersImported++;
 
-      // Recursively import files and subfolders
-      await _importDirectoryRecursive(dir, rootFolderId, (files, folders) {
-        filesImported += files;
-        foldersImported += folders;
-      });
+      // Import each selected file
+      for (var file in result.files) {
+        if (file.path != null) {
+          try {
+            final fileObj = File(file.path!);
+            final content = await fileObj.readAsString();
+            
+            final markdownFile = MarkdownFile(
+              id: 'imported-file-${now.millisecondsSinceEpoch}-$filesImported',
+              name: file.name,
+              content: content,
+              folderId: rootFolderId,
+              tags: [],
+              isFavorite: false,
+              updatedAt: 'Just now',
+              size: '${(file.size / 1024).toStringAsFixed(1)}kb',
+            );
+
+            _files.add(markdownFile);
+            filesImported++;
+            
+            // Small delay to prevent UI freezing
+            if (filesImported % 5 == 0) {
+              await Future.delayed(const Duration(milliseconds: 10));
+            }
+          } catch (e) {
+            debugPrint('Error importing file ${file.name}: $e');
+          }
+        }
+      }
 
       await _saveData();
       notifyListeners();
@@ -376,81 +401,11 @@ class AppProvider with ChangeNotifier {
       return {
         'success': true,
         'filesImported': filesImported,
-        'foldersImported': foldersImported,
+        'foldersImported': 1,
         'folderName': folderName,
       };
     } catch (e) {
       return {'success': false, 'message': 'Error: $e'};
-    }
-  }
-
-  Future<void> _importDirectoryRecursive(
-    Directory dir,
-    String parentFolderId,
-    Function(int files, int folders) onProgress,
-  ) async {
-    int filesCount = 0;
-    int foldersCount = 0;
-
-    try {
-      await for (var entity in dir.list()) {
-        if (entity is File) {
-          // Check if it's a markdown file
-          if (entity.path.toLowerCase().endsWith('.md') ||
-              entity.path.toLowerCase().endsWith('.markdown')) {
-            try {
-              final content = await entity.readAsString();
-              final fileName = path.basename(entity.path);
-              final stat = await entity.stat();
-              final sizeInKb = '${(stat.size / 1024).toStringAsFixed(1)}kb';
-
-              final markdownFile = MarkdownFile(
-                id: 'imported-file-${DateTime.now().millisecondsSinceEpoch}-$filesCount',
-                name: fileName,
-                content: content,
-                folderId: parentFolderId,
-                tags: [],
-                isFavorite: false,
-                updatedAt: 'Just now',
-                size: sizeInKb,
-              );
-
-              _files.add(markdownFile);
-              filesCount++;
-              
-              // Small delay to prevent overwhelming
-              if (filesCount % 10 == 0) {
-                await Future.delayed(const Duration(milliseconds: 10));
-              }
-            } catch (e) {
-              debugPrint('Error reading file ${entity.path}: $e');
-            }
-          }
-        } else if (entity is Directory) {
-          // Create subfolder
-          final folderName = path.basename(entity.path);
-          
-          // Skip hidden folders
-          if (folderName.startsWith('.')) continue;
-
-          final subFolder = Folder(
-            id: 'imported-folder-${DateTime.now().millisecondsSinceEpoch}-$foldersCount',
-            name: folderName,
-            parentId: parentFolderId,
-            updatedAt: 'Just now',
-          );
-
-          _folders.add(subFolder);
-          foldersCount++;
-
-          // Recursively import subfolder
-          await _importDirectoryRecursive(entity, subFolder.id, onProgress);
-        }
-      }
-
-      onProgress(filesCount, foldersCount);
-    } catch (e) {
-      debugPrint('Error importing directory: $e');
     }
   }
 

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:provider/provider.dart';
 import 'package:permission_handler/permission_handler.dart';
 import '../providers/app_provider.dart';
@@ -562,12 +563,12 @@ class _FileExplorerScreenState extends State<FileExplorerScreen> {
             ),
             const SizedBox(height: 24),
             
-            // Import Folder
+            // Import Files
             _buildImportOption(
               context,
-              icon: Icons.folder_open,
-              title: 'Import Folder',
-              description: 'Import all markdown files from a folder (including subfolders)',
+              icon: Icons.file_copy_outlined,
+              title: 'Import Files',
+              description: 'Select multiple markdown files from any folder on your device',
               onTap: () {
                 Navigator.pop(context);
                 _importFolder(context, provider);
@@ -718,7 +719,7 @@ class _FileExplorerScreenState extends State<FileExplorerScreen> {
                 children: [
                   CircularProgressIndicator(),
                   SizedBox(height: 16),
-                  Text('Opening folder picker...'),
+                  Text('Opening file picker...'),
                 ],
               ),
             ),
@@ -967,19 +968,17 @@ class _FileExplorerScreenState extends State<FileExplorerScreen> {
   }
 
   Future<bool> _checkStoragePermission(BuildContext context) async {
-    // Check if MANAGE_EXTERNAL_STORAGE is granted (best for Android 11+)
-    if (await Permission.manageExternalStorage.isGranted) {
+    // Skip permission check on web - not needed for file picker
+    if (kIsWeb) {
       return true;
     }
-
-    // Check storage permission for Android < 11
+    
+    // With Storage Access Framework (SAF), we don't need complex permissions
+    // The system handles permissions automatically when user selects files
+    // We only check if basic permissions are needed for older Android versions
+    
+    // For Android 10 and below, check storage permission
     if (await Permission.storage.isGranted) {
-      return true;
-    }
-
-    // Try media library permission (Android 13+)
-    if (await Permission.photos.isGranted || 
-        await Permission.videos.isGranted) {
       return true;
     }
 
@@ -989,37 +988,42 @@ class _FileExplorerScreenState extends State<FileExplorerScreen> {
       if (!shouldRequest) return false;
     }
 
-    // Request storage permission
+    // Request storage permission (mainly for Android 10 and below)
     var status = await Permission.storage.request();
     
     if (status.isGranted) {
       return true;
     }
 
-    // For Android 11+, try MANAGE_EXTERNAL_STORAGE
-    if (status.isDenied || status.isPermanentlyDenied) {
-      // Note: MANAGE_EXTERNAL_STORAGE requires manual enable in Settings
-      // We can't request it directly, must redirect to Settings
-      
+    // If permission denied but we're on Android 11+, SAF will still work
+    // So we return true to allow the file picker to open
+    if (status.isDenied) {
+      // Show info that file picker will still work
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text('You can still select files using the file picker'),
+            backgroundColor: Theme.of(context).colorScheme.primary,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+      return true; // Allow SAF to work
+    }
+
+    // Only if permanently denied, show settings dialog
+    if (status.isPermanentlyDenied) {
       if (mounted) {
         final shouldOpenSettings = await _showManualPermissionDialog(context);
         if (shouldOpenSettings) {
           await openAppSettings();
-          
-          // Wait a bit for user to return from settings
-          await Future.delayed(const Duration(seconds: 1));
-          
-          // Check again after returning from settings
-          if (await Permission.manageExternalStorage.isGranted ||
-              await Permission.storage.isGranted) {
-            return true;
-          }
         }
       }
-      return false;
+      // Still return true because SAF works without storage permission
+      return true;
     }
 
-    return false;
+    return true; // Default to true to allow SAF
   }
 
   Future<bool> _showPermissionExplanationDialog(BuildContext context) async {
@@ -1033,26 +1037,26 @@ class _FileExplorerScreenState extends State<FileExplorerScreen> {
           color: colorScheme.primary,
           size: 48,
         ),
-        title: const Text('Storage Access Required'),
+        title: const Text('Select Your Files'),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const Text(
-              'MarkFlow needs access to your storage to:',
+              'MarkFlow will open a file picker where you can:',
               style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
             ),
             const SizedBox(height: 12),
             _buildPermissionReason(
               context,
-              icon: Icons.download,
-              text: 'Import markdown files from your device',
+              icon: Icons.touch_app,
+              text: 'Select multiple markdown files at once',
             ),
             const SizedBox(height: 8),
             _buildPermissionReason(
               context,
               icon: Icons.folder,
-              text: 'Read folders containing markdown notes',
+              text: 'Browse any folder on your device',
             ),
             const SizedBox(height: 8),
             _buildPermissionReason(
@@ -1069,7 +1073,7 @@ class _FileExplorerScreenState extends State<FileExplorerScreen> {
           ),
           FilledButton(
             onPressed: () => Navigator.pop(context, true),
-            child: const Text('Grant Access'),
+            child: const Text('Open File Picker'),
           ),
         ],
       ),
@@ -1191,10 +1195,10 @@ class _FileExplorerScreenState extends State<FileExplorerScreen> {
     
     if (result['success'] == true) {
       String message;
-      if (result.containsKey('filesImported') && result.containsKey('foldersImported')) {
-        message = 'Imported ${result['filesImported']} files and ${result['foldersImported']} folders';
-      } else if (result.containsKey('filesImported')) {
-        message = 'Imported ${result['filesImported']} files';
+      if (result.containsKey('filesImported')) {
+        final fileCount = result['filesImported'];
+        final folderName = result['folderName'] ?? 'folder';
+        message = 'Successfully imported $fileCount file${fileCount == 1 ? '' : 's'} into "$folderName"';
       } else if (result.containsKey('fileName')) {
         message = 'Imported: ${result['fileName']}';
       } else {
@@ -1212,6 +1216,7 @@ class _FileExplorerScreenState extends State<FileExplorerScreen> {
           ),
           backgroundColor: Colors.green,
           behavior: SnackBarBehavior.floating,
+          duration: const Duration(seconds: 4),
         ),
       );
     } else {
