@@ -1021,28 +1021,6 @@ class _FileExplorerScreenState extends State<FileExplorerScreen> {
 
     return false;
   }
-    }
-
-    // Request storage permission
-    final status = await Permission.storage.request();
-    
-    if (status.isGranted) {
-      return true;
-    }
-
-    // For Android 11+, explain that MANAGE_EXTERNAL_STORAGE needs manual enable
-    if (status.isDenied || status.isPermanentlyDenied) {
-      if (mounted) {
-        final shouldOpenSettings = await _showManualPermissionDialog(context);
-        if (shouldOpenSettings) {
-          await openAppSettings();
-        }
-      }
-      return false;
-    }
-
-    return false;
-  }
 
   Future<bool> _showPermissionExplanationDialog(BuildContext context) async {
     final colorScheme = Theme.of(context).colorScheme;
