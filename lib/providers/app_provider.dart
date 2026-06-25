@@ -208,6 +208,131 @@ class AppProvider with ChangeNotifier {
     notifyListeners();
   }
 
+  // Export database to JSON
+  Future<Map<String, dynamic>> exportDatabase() async {
+    try {
+      final exportData = {
+        'version': '1.0.0',
+        'exportDate': DateTime.now().toIso8601String(),
+        'folders': _folders.map((f) => f.toJson()).toList(),
+        'files': _files.map((f) => f.toJson()).toList(),
+      };
+
+      return {
+        'success': true,
+        'data': exportData,
+      };
+    } catch (e) {
+      return {
+        'success': false,
+        'message': 'Error exporting: $e',
+      };
+    }
+  }
+
+  // Import database from JSON
+  Future<Map<String, dynamic>> importDatabase(Map<String, dynamic> importData) async {
+    try {
+      // Validate data structure
+      if (!importData.containsKey('folders') || !importData.containsKey('files')) {
+        return {
+          'success': false,
+          'message': 'Invalid backup file format',
+        };
+      }
+
+      // Parse folders
+      final folders = (importData['folders'] as List)
+          .map((item) => Folder.fromJson(item))
+          .toList();
+
+      // Parse files
+      final files = (importData['files'] as List)
+          .map((item) => MarkdownFile.fromJson(item))
+          .toList();
+
+      // Replace current data
+      _folders = folders;
+      _files = files;
+      _currentFolderId = folders.isNotEmpty ? folders.first.id : null;
+      
+      await _saveData();
+      notifyListeners();
+
+      return {
+        'success': true,
+        'foldersCount': folders.length,
+        'filesCount': files.length,
+      };
+    } catch (e) {
+      return {
+        'success': false,
+        'message': 'Error importing: $e',
+      };
+    }
+  }
+
+  // Merge imported data with existing data
+  Future<Map<String, dynamic>> mergeDatabase(Map<String, dynamic> importData) async {
+    try {
+      if (!importData.containsKey('folders') || !importData.containsKey('files')) {
+        return {
+          'success': false,
+          'message': 'Invalid backup file format',
+        };
+      }
+
+      // Parse folders
+      final importedFolders = (importData['folders'] as List)
+          .map((item) => Folder.fromJson(item))
+          .toList();
+
+      // Parse files
+      final importedFiles = (importData['files'] as List)
+          .map((item) => MarkdownFile.fromJson(item))
+          .toList();
+
+      int foldersAdded = 0;
+      int filesAdded = 0;
+      int duplicates = 0;
+
+      // Merge folders (skip if ID already exists)
+      for (var folder in importedFolders) {
+        if (!_folders.any((f) => f.id == folder.id)) {
+          _folders.add(folder);
+          foldersAdded++;
+        } else {
+          duplicates++;
+        }
+      }
+
+      // Merge files (skip if ID already exists)
+      for (var file in importedFiles) {
+        if (!_files.any((f) => f.id == file.id)) {
+          _files.add(file);
+          filesAdded++;
+        } else {
+          duplicates++;
+        }
+      }
+
+      await _saveData();
+      notifyListeners();
+
+      return {
+        'success': true,
+        'foldersAdded': foldersAdded,
+        'filesAdded': filesAdded,
+        'duplicates': duplicates,
+      };
+    } catch (e) {
+      return {
+        'success': false,
+        'message': 'Error merging: $e',
+      };
+    }
+  }
+
   // Import folder from device storage
   Future<Map<String, dynamic>> importFolderFromDevice() async {
     try {
